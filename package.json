@@ -1,5 +1,5 @@
 {
-  "name": "splash-screen-generatos",
+  "name": "splash-screen-generator",
   "version": "1.0.0",
   "description": "Easily generate splash screens to use in your PWA's.",
   "main": "index.js",
@@ -23,8 +23,7 @@
   "license": "MIT",
   "dependencies": {
     "gm": "^1.23.1",
-    "lodash": "^4.17.10",
-    "mkdirp": "^0.5.1"
+    "lodash": "^4.17.10"
   },
   "devDependencies": {
     "ava": "^0.25.0",
@@ -35,6 +34,8 @@
     "eslint-plugin-node": "^6.0.1",
     "eslint-plugin-promise": "^3.7.0",
     "eslint-plugin-standard": "^3.1.0",
+    "mkdirp": "^0.5.1",
+    "rimraf": "^2.6.2",
     "standard-version": "^4.3.0"
   }
 }

@@ -1,39 +1,16 @@
 const gm = require('gm')
-const mkdirp = require('mkdirp')
 const path = require('path')
-
-mkdirp('./tmp')
-
+const fs = require('fs')
+const mkdirp = require('mkdirp')
 const _ = require('lodash')
-const iOS = {
-  statusBar: 20,
-  dimensions: [
-    {
-      width: 768,
-      height: 1024,
-      depth: 2,
-      label: 'iPad'
-    },
-    {
-      width: 768,
-      height: 1024,
-      depth: 1,
-      label: 'iPad retina'
-    },
-    {
-      width: 414,
-      height: 736,
-      depth: 3,
-      label: 'iPhone 6 Plus'
-    },
-    {
-      width: 320,
-      height: 568,
-      depth: 2,
-      label: 'iPhone 5'
-    }
-  ]
-}
+
+const formatsLib = path.resolve(__dirname, './lib/formats')
+const formats = {}
+
+// load formats
+fs.readdirSync(formatsLib).forEach(format => {
+  _.merge(formats, { [path.parse(format).name]: require(path.join(formatsLib, format)) })
+})
 
 function sanitizeSize (sizeObj, statusBar) {
   const orientation = sizeObj.width <= sizeObj.height ? 'portrait' : 'landscape'
@@ -48,20 +25,20 @@ function sanitizeSize (sizeObj, statusBar) {
   })
 }
 
-function compose (dimensionsBundle) {
+function compose (dimensionsBundle, { rotate = true } = {}) {
   const { statusBar, dimensions } = dimensionsBundle
   const newSizes = []
 
   dimensions.forEach(size => {
-    const landscape = Object.assign({}, size)
+    const rotated = Object.assign({}, size)
 
-    const { width, height } = landscape
+    const { width, height } = rotated
 
-    landscape.width = height
-    landscape.height = width
+    rotated.width = height
+    rotated.height = width
 
     newSizes.push(sanitizeSize(size, statusBar))
-    newSizes.push(sanitizeSize(landscape, statusBar))
+    rotate && newSizes.push(sanitizeSize(rotated, statusBar))
   })
 
   return newSizes
@@ -74,19 +51,19 @@ function dimensionFilename (dimension) {
 async function getImageDimensions (img) {
   return new Promise((resolve, reject) => {
     gm(img)
-    .size((err, value) => {
-      if (err) {
-        return reject(err)
-      }
-      resolve(value)
-    })
+      .size((err, value) => {
+        if (err) {
+          return reject(err)
+        }
+        resolve(value)
+      })
   })
 }
 
-async function createSplash (dimension, { logo, logoDimensions, destination, backgroundColor, logoScale = .3, logoMargin = 0 } = {}) {
+async function createSplash (dimension, { logo, logoDimensions, destination, backgroundColor, logoScale = 0.3 } = {}) {
   const { crop } = dimension
   const fileName = dimensionFilename(dimension)
-  const file = path.resolve(process.cwd(), destination, fileName)
+  const file = path.join(destination, fileName)
 
   // console.log({ logo })
   const newLogoWidth = (crop.width * logoScale)
@@ -96,41 +73,21 @@ async function createSplash (dimension, { logo, logoDimensions, destination, bac
     height: Math.round(newLogoWidth * logoDimensions.height / logoDimensions.width)
   }
 
-  const genInitialFile = async () => {
-    return new Promise((resolve, reject) => {
-      gm(logo)
+  return new Promise(async (resolve, reject) => {
+    gm(logo)
       .resize(logoSize.width, logoSize.height)
-      .crop(crop.width, crop.height)
-      /*
-       .background(backgroundColor)
-       */
+      .background(backgroundColor)
+      .gravity('Center')
+      .extent(crop.width, crop.height)
       .write(file, async (err, res) => {
         if (err) {
           return reject(err)
         }
 
+        // console.log(`file ${file} written`)
+
         resolve(res)
       })
-    })
-  }
-
-  return new Promise(async (resolve, reject) => {
-    // await genInitialFile()
-    // console.log({ logoSize })
-    gm(logo)
-    .resize(logoSize.width, logoSize.height)
-    .background(backgroundColor)
-    .gravity('Center')
-    .extent(crop.width, crop.height)
-    .write(file, async (err, res) => {
-      if (err) {
-        return reject(err)
-      }
-
-      // console.log(`file ${file} written`)
-
-      resolve(res)
-    })
   })
 }
 
@@ -140,7 +97,7 @@ function generateMetaHead (dimensionsBundle, { publicPath = '/splash/', rel = 'a
   dimensionsBundle.forEach(dimension => {
     const { crop: { media } } = dimension
     head.push({
-      href: path.join(publicPath, dimensionFilename(dimension)),
+      href: path.join(path.dirname(publicPath + '/.'), dimensionFilename(dimension)),
       media,
       rel
     })
@@ -148,8 +105,15 @@ function generateMetaHead (dimensionsBundle, { publicPath = '/splash/', rel = 'a
   return head
 }
 
-async function generate (dimensionsBundle, { logo, destination = './tmp', backgroundColor } = {}) {
-  const dimensions = compose(dimensionsBundle)
+async function generate (dimensionsBundle, { publicPath, logo, destination, backgroundColor, rel, rotate, logoScale } = {}) {
+  logo = path.resolve(process.cwd(), logo)
+  destination = path.resolve(process.cwd(), destination)
+
+  if (!fs.existsSync(destination)) {
+    mkdirp(destination)
+  }
+
+  const dimensions = compose(dimensionsBundle, { rotate })
   const generation = []
 
   const logoDimensions = await getImageDimensions(logo)
@@ -157,22 +121,20 @@ async function generate (dimensionsBundle, { logo, destination = './tmp', backgr
   // console.log({ logoDimensions })
 
   dimensions.forEach(dimension => {
-    generation.push(createSplash(dimension, { logo, logoDimensions, destination, backgroundColor }))
+    generation.push(createSplash(dimension, { logo, logoDimensions, destination, backgroundColor, logoScale }))
   })
 
   return Promise
-  .all(generation)
-  .then(() => {
-    return generateMetaHead(dimensions)
-  })
+    .all(generation)
+    .then(() => {
+      return generateMetaHead(dimensions, { publicPath, rel })
+    })
 }
 
 module.exports = generate
 
 _.merge(module.exports, {
-  formats: {
-    iOS
-  },
+  formats,
   compose,
   getImageDimensions
 })

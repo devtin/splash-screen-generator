@@ -1,4 +1,6 @@
 import test from 'ava'
+import rimraf from 'rimraf'
+import mkdirp from 'mkdirp'
 import SplashScreenGenerator from '../'
 import _ from 'lodash'
 import path from 'path'
@@ -7,8 +9,18 @@ const resolveSrc = file => {
   return path.join(__dirname, './src', file)
 }
 
+const tmpDir = path.join(__dirname, './tmp')
+
+test.before(async () => {
+  rimraf.sync(tmpDir)
+  mkdirp(tmpDir)
+})
+
+test.after(async () => {
+})
+
 test('Resizes image', async t => {
-  const size = await SplashScreenGenerator.getImageDimensions('./pixel.png')
+  const size = await SplashScreenGenerator.getImageDimensions(resolveSrc('pixel.png'))
   t.true(typeof size === 'object')
   t.true(size.hasOwnProperty('width'))
   t.true(size.hasOwnProperty('height'))
@@ -18,14 +30,14 @@ test('Resizes image', async t => {
 
 test('Compose dimensions', async t => {
   t.true(typeof SplashScreenGenerator === 'function')
-  t.true(typeof SplashScreenGenerator.formats.iOS === 'object')
-  t.true(SplashScreenGenerator.formats.iOS.hasOwnProperty('statusBar'))
-  t.true(SplashScreenGenerator.formats.iOS.hasOwnProperty('dimensions'))
+  t.true(typeof SplashScreenGenerator.formats.ios === 'object')
+  t.true(SplashScreenGenerator.formats.ios.hasOwnProperty('statusBar'))
+  t.true(SplashScreenGenerator.formats.ios.hasOwnProperty('dimensions'))
 
-  const splashScreens = SplashScreenGenerator.compose(SplashScreenGenerator.formats.iOS)
+  const splashScreens = SplashScreenGenerator.compose(SplashScreenGenerator.formats.ios)
 
   t.true(Array.isArray(splashScreens))
-  t.is(splashScreens.length, SplashScreenGenerator.formats.iOS.dimensions.length * 2)
+  t.is(splashScreens.length, SplashScreenGenerator.formats.ios.dimensions.length * 2)
 
   const sampleSplash = _.sample(splashScreens)
   t.true(typeof sampleSplash === 'object')
@@ -35,15 +47,20 @@ test('Compose dimensions', async t => {
   t.true(typeof sampleSplash.crop === 'object')
   t.true(sampleSplash.crop.hasOwnProperty('width'))
   t.true(sampleSplash.crop.hasOwnProperty('height'))
+})
 
-  // console.log({ sampleSplash })
-
-  const metaHead = await SplashScreenGenerator(SplashScreenGenerator.formats.iOS, {
-    backgroundColor: '#ffcc00',
+test('Generate files', async t => {
+  const metaHead = await SplashScreenGenerator(SplashScreenGenerator.formats.ios, {
+    destination: tmpDir,
+    backgroundColor: '#27BAB4',
     logo: resolveSrc('logo-full.png')
   })
 
-  // const metaHead = await t.notThrows()
-  console.log({ metaHead })
+  const fs = require('fs')
+
   t.true(Array.isArray(metaHead))
+  const files = fs.readdirSync(tmpDir)
+  t.is(files.length, metaHead.length)
+  const sep = `\n`
+  t.log(`Written in ${tmpDir}:${sep}${files.join(sep)}`)
 })
